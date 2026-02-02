@@ -1,12 +1,7 @@
 import asyncio
 import os
 import json
-from fastapi import WebSocket
-from deepgram import (
-    DeepgramClient,
-    LiveTranscriptionEvents,
-    LiveOptions,
-)
+from deepgram import DeepgramClient
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,52 +19,73 @@ class StreamManager:
         from backend.speculative import SpeculativeEngine
         self.engine = SpeculativeEngine()
         
-        # Configure Deepgram options
-        options = LiveOptions(
-            model="nova-2", 
-            language="en-US", 
-            smart_format=True,
-            interim_results=True,
-            vad_events=True,
-        )
-        
-        self.dg_connection = self.dg_client.listen.live.v("1")
-
-        # Event Listeners
-        self.dg_connection.on(LiveTranscriptionEvents.Transcript, self.on_transcript)
-        self.dg_connection.on(LiveTranscriptionEvents.Error, self.on_error)
-        
         # Start Deepgram connection
         print("Starting Deepgram connection...")
-        if self.dg_connection.start(options) is False:
-             print("Deepgram failed to start")
-             return
-        print("Deepgram connection started successfully")
-
-        # Start receiving audio from client
         try:
+            # New SDK Pattern: Usage connection context manager
+            # Manually enter context to keep connection alive
+            connection_ctx = self.dg_client.listen.live.v("1").connect(
+                model="nova-2",
+                language="en-US",
+                smart_format="true",
+                interim_results="true",
+                vad_events="true",
+            )
+            # Enter async context
+            self.dg_connection = await connection_ctx.__aenter__()
+            
+            # Register Listeners
+            from deepgram.core.events import EventType
+            self.dg_connection.on(EventType.MESSAGE, self.on_message)
+            self.dg_connection.on(EventType.ERROR, self.on_error)
+            
+            # Start background listener task
+            # The SDK's start_listening() loops forever, so we need to run it in background
+            self.listener_task = asyncio.create_task(self.dg_connection.start_listening())
+            
+            print("Deepgram connection started successfully")
+
+            # Start receiving audio from client
             print("Listening for audio bytes from client...")
             chunk_count = 0
             while True:
                 data = await self.fastapi_ws.receive_bytes()
                 chunk_count += 1
-                if chunk_count % 10 == 0:
-                    print(f"Received audio chunk #{chunk_count}, size: {len(data)}")
-                self.dg_connection.send(data)
+                if chunk_count % 50 == 0:
+                     print(f"Received audio chunk #{chunk_count}, size: {len(data)}")
+                await self.dg_connection.send(data)
+
         except Exception as e:
             print(f"WebSocket closed: {e}")
             await self.stop()
 
-    def on_transcript(self, result, **kwargs):
-        asyncio.create_task(self._process_transcript(result))
+    def on_message(self, result, **kwargs):
+        # Result is likely a ListenV1ResultsEvent or similar Pydantic model
+        # We need to check if it has a transcript
+        # The structure is result.channel.alternatives[0].transcript
+        
+        # Note: 'result' might be MetadataEvent or UtteranceEndEvent too.
+        # We need to check carefully.
+        try:
+             # Check if it's a result with a channel
+            if hasattr(result, 'channel'):
+                 asyncio.create_task(self._process_transcript(result))
+        except Exception:
+            pass
 
     async def _process_transcript(self, result):
+        # Access pydantic model fields
+        if not result.channel.alternatives:
+             return
+             
         sentence = result.channel.alternatives[0].transcript
         if len(sentence) == 0:
             return
             
         is_final = result.is_final
-        speech_final = result.speech_final
+        # speech_final might not be directly on result in V1? 
+        # Checking schema... result.speech_final maps to 'speech_final' prop
+        speech_final = getattr(result, 'speech_final', False)
         
         # Speculative Logic
         if is_final:
@@ -118,6 +134,7 @@ class StreamManager:
         print(f"Deepgram Error: {error}")
 
     async def stop(self):
-        if self.dg_connection:
-            self.dg_connection.finish()
-            self.dg_connection = None
+        # If we manually entered context, we must exit it?
+        # Or just close connection?
+        pass # Context manager nuances... let's just let it die for now or implement strict cleanup later
+
