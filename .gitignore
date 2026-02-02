@@ -1,0 +1,33 @@
+# Environment files
+.env
+
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+ENV/
+
+# VSCode
+.vscode/
+
+# JetBrains IDE (PyCharm, etc.)
+.idea/
+
+# Operating System files
+.DS_Store        # macOS Finder
+Thumbs.db        # Windows Explorer
+
+# Logs
+*.log
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Other temporary or auto-generated files
+*.bak
+*.swp

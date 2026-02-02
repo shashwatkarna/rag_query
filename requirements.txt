@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+websockets
+httpx
+# AI/ML
+groq
+deepgram-sdk
+qdrant-client
+sentence-transformers
+# PDF Processing
+pymupdf
+langchain-text-splitters
+# Utilities
+numpy
+scikit-learn
