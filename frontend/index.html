@@ -134,7 +134,7 @@
             };
 
             ws.onmessage = async (event) => {
-                // If it's a blob/binary, it's audio
+
                 if (event.data instanceof Blob) {
                     log("Received Audio Chunk");
                     const arrayBuffer = await event.data.arrayBuffer();
