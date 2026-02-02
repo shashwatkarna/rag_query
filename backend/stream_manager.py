@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+from fastapi import WebSocket
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
 
@@ -9,7 +10,7 @@ load_dotenv()
 class StreamManager:
     def __init__(self, websocket: WebSocket):
         self.fastapi_ws = websocket
-        self.dg_client = DeepgramClient(os.getenv("DEEPGRAM_API_KEY"))
+        self.dg_client = DeepgramClient(api_key=os.getenv("DEEPGRAM_API_KEY"))
         self.dg_connection = None
 
     async def start(self):
@@ -24,7 +25,7 @@ class StreamManager:
         try:
             # New SDK Pattern: Usage connection context manager
             # Manually enter context to keep connection alive
-            connection_ctx = self.dg_client.listen.live.v("1").connect(
+            connection_ctx = self.dg_client.listen.v("1").connect(
                 model="nova-2",
                 language="en-US",
                 smart_format="true",
